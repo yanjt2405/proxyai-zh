@@ -27,6 +27,8 @@
   </projectListeners>
 
   <extensions defaultExtensionNs="com.intellij">
+    <config.codeVisionGroupSettingProvider
+      implementation="ee.carlrobert.codegpt.actions.editor.MethodCodeVisionGroupSettingProvider"/>
     <postStartupActivity implementation="ee.carlrobert.codegpt.LegacyMigrationActivity"/>
     <postStartupActivity implementation="ee.carlrobert.codegpt.CodeGPTProjectActivity"/>
     <postStartupActivity implementation="ee.carlrobert.codegpt.CodeGPTUpdateActivity"/>

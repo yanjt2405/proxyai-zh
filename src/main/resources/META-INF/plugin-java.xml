@@ -5,8 +5,8 @@
   </projectListeners>
 
   <extensions defaultExtensionNs="com.intellij">
-    <codeInsight.lineMarkerProvider language="JAVA"
-      implementationClass="ee.carlrobert.codegpt.actions.editor.JavaMethodLineMarkerProvider"/>
+    <codeInsight.daemonBoundCodeVisionProvider
+      implementation="ee.carlrobert.codegpt.actions.editor.JavaMethodCodeVisionProvider"/>
     <applicationService
       serviceImplementation="ee.carlrobert.codegpt.codecompletions.psi.JavaContextFinder"/>
   </extensions>
