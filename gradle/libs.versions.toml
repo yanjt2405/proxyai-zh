@@ -1,5 +1,5 @@
 [versions]
-analytics = "3.1.2"
+analytics = "3.1.7"
 acp = "0.17.0"
 assertj = "3.27.3"
 changelog = "2.2.1"
