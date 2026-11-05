@@ -1,0 +1,449 @@
+package ee.carlrobert.codegpt.agent.clients
+
+import ai.koog.prompt.executor.clients.openai.OpenAIResponsesParams
+import ai.koog.prompt.executor.clients.openai.base.models.ReasoningEffort
+import ai.koog.prompt.executor.clients.openai.models.ReasoningConfig
+import ai.koog.prompt.executor.clients.openai.models.ReasoningSummary
+import ai.koog.prompt.params.LLMParams
+import ai.koog.prompt.params.LLMParams.ToolChoice
+import ee.carlrobert.codegpt.settings.service.custom.CustomServiceChatCompletionSettingsState
+import kotlinx.serialization.json.*
+
+internal fun LLMParams.toCustomOpenAIParams(state: CustomServiceChatCompletionSettingsState): CustomOpenAIParams {
+    val current = this as? CustomOpenAIParams
+    val body = state.body
+
+    val mergedAdditionalProperties = buildMap {
+        body
+            .filterKeys { it !in CUSTOM_OPENAI_RESERVED_BODY_KEYS }
+            .forEach { (key, value) -> put(key, value.toJsonElement()) }
+    }.takeIf { it.isNotEmpty() }
+
+    return CustomOpenAIParams(
+        additionalProperties = mergedAdditionalProperties,
+        temperature = body.findValue("temperature").asDouble() ?: temperature,
+        maxTokens = body.findValue("maxTokens", "max_tokens").asInt() ?: maxTokens,
+        toolChoice = body.findValue("toolChoice", "tool_choice").asToolChoice() ?: toolChoice,
+        frequencyPenalty = body.findValue("frequencyPenalty", "frequency_penalty").asDouble()
+            ?: current?.frequencyPenalty,
+        presencePenalty = body.findValue("presencePenalty", "presence_penalty").asDouble()
+            ?: current?.presencePenalty,
+        stop = body.findValue("stop").asStopList() ?: current?.stop,
+        topP = body.findValue("topP", "top_p").asDouble() ?: current?.topP,
+        topK = body.findValue("topK", "top_k").asInt() ?: current?.topK,
+        repetitionPenalty = body.findValue("repetitionPenalty", "repetition_penalty").asDouble()
+            ?: current?.repetitionPenalty,
+    )
+}
+
+internal fun LLMParams.toCustomOpenAIResponsesParams(
+    state: CustomServiceChatCompletionSettingsState
+): OpenAIResponsesParams {
+    val body = state.body
+    val currentReasoning = (this as? OpenAIResponsesParams)?.reasoning
+    val bodyReasoning = body.findValue("reasoning").asReasoningConfig()
+
+    val mergedAdditionalProperties = buildMap {
+        body
+            .filterKeys { it !in CUSTOM_OPENAI_RESPONSES_RESERVED_BODY_KEYS }
+            .forEach { (key, value) -> put(key, value.toJsonElement()) }
+    }.takeIf { it.isNotEmpty() }
+
+    return OpenAIResponsesParams(
+        additionalProperties = mergedAdditionalProperties,
+        temperature = body.findValue("temperature").asDouble() ?: temperature,
+        maxTokens = body.findValue("maxOutputTokens", "max_output_tokens").asInt() ?: maxTokens,
+        numberOfChoices = numberOfChoices,
+        reasoning = when {
+            bodyReasoning == null -> currentReasoning
+            currentReasoning == null -> bodyReasoning
+            else -> ReasoningConfig(
+                effort = bodyReasoning.effort ?: currentReasoning.effort,
+                summary = bodyReasoning.summary ?: currentReasoning.summary
+            )
+        },
+        schema = schema,
+        toolChoice = body.findValue("toolChoice", "tool_choice").asToolChoice() ?: toolChoice,
+    )
+}
+
+internal fun CustomServiceChatCompletionSettingsState.shouldStream(): Boolean {
+    return body.findValue("stream").asBoolean() == true
+}
+
+internal val CUSTOM_OPENAI_RESERVED_BODY_KEYS = setOf(
+    "frequencyPenalty", "frequency_penalty",
+    "maxTokens", "max_tokens",
+    "messages",
+    "minP", "min_p",
+    "presencePenalty", "presence_penalty",
+    "repetitionPenalty", "repetition_penalty",
+    "stop",
+    "stream",
+    "temperature",
+    "toolChoice", "tool_choice",
+    "tools",
+    "topK", "top_k",
+    "topP", "top_p",
+)
+
+internal val CUSTOM_OPENAI_RESPONSES_RESERVED_BODY_KEYS = setOf(
+    "input",
+    "maxOutputTokens", "max_output_tokens",
+    "messages",
+    "model",
+    "reasoning",
+    "stream",
+    "temperature",
+    "toolChoice", "tool_choice",
+    "tools",
+)
+
+private fun Map<String, Any>.findValue(vararg keys: String): Any? {
+    keys.forEach { key ->
+        if (containsKey(key)) {
+            return this[key]
+        }
+    }
+    return null
+}
+
+private fun Any?.asDouble(): Double? = when (this) {
+    is Number -> toDouble()
+    is String -> toDoubleOrNull()
+    else -> null
+}
+
+private fun Any?.asInt(): Int? = when (this) {
+    is Int -> this
+    is Long -> takeIf { it in Int.MIN_VALUE..Int.MAX_VALUE }?.toInt()
+    is Number -> {
+        val value = toDouble()
+        if (!value.isFinite() || value % 1.0 != 0.0) {
+            null
+        } else {
+            value.toInt()
+        }
+    }
+
+    is String -> toIntOrNull()
+    else -> null
+}
+
+private fun Any?.asBoolean(): Boolean? = when (this) {
+    is Boolean -> this
+    is String -> when (trim().lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> null
+    }
+
+    else -> null
+}
+
+private fun Any?.asStopList(): List<String>? = asStringList(allowEmpty = false)
+
+private fun Any?.asStringList(allowEmpty: Boolean = false): List<String>? = when (this) {
+    is String -> listOf(this)
+    is List<*> -> mapNotNull { item ->
+        when (item) {
+            is String -> item
+            null -> null
+            else -> item.toString()
+        }
+    }.takeIf { allowEmpty || it.isNotEmpty() }
+
+    else -> null
+}
+
+private fun Any?.asToolChoice(): ToolChoice? = when (this) {
+    is ToolChoice -> this
+    is String -> when (trim().lowercase()) {
+        "auto" -> ToolChoice.Auto
+        "none" -> ToolChoice.None
+        "required" -> ToolChoice.Required
+        else -> trim().takeIf { it.isNotEmpty() }?.let { ToolChoice.Named(it) }
+    }
+
+    is Map<*, *> -> {
+        when (this["type"]?.toString()?.trim()?.lowercase()) {
+            "none" -> ToolChoice.None
+            "auto" -> ToolChoice.Auto
+            "required" -> ToolChoice.Required
+            else -> {
+                val directName = this["name"]?.toString()
+                val nestedName = (this["function"] as? Map<*, *>)?.get("name")?.toString()
+                (directName ?: nestedName)
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { ToolChoice.Named(it) }
+            }
+        }
+    }
+
+    else -> null
+}
+
+private fun Any?.asReasoningConfig(): ReasoningConfig? {
+    val value = this as? Map<*, *> ?: return null
+    val effort = value["effort"].asReasoningEffort()
+    val summary = value["summary"].asReasoningSummary()
+
+    if (effort == null && summary == null) {
+        return null
+    }
+
+    return ReasoningConfig(
+        effort = effort,
+        summary = summary
+    )
+}
+
+private fun Any?.asReasoningEffort(): ReasoningEffort? = when (this) {
+    is ReasoningEffort -> this
+    is String -> when (trim().lowercase()) {
+        "none" -> ReasoningEffort.NONE
+        "minimal" -> ReasoningEffort.MINIMAL
+        "low" -> ReasoningEffort.LOW
+        "medium" -> ReasoningEffort.MEDIUM
+        "high" -> ReasoningEffort.HIGH
+        else -> null
+    }
+
+    else -> null
+}
+
+private fun Any?.asReasoningSummary(): ReasoningSummary? = when (this) {
+    is ReasoningSummary -> this
+    is String -> when (trim().lowercase()) {
+        "auto" -> ReasoningSummary.AUTO
+        "concise" -> ReasoningSummary.CONCISE
+        "detailed" -> ReasoningSummary.DETAILED
+        else -> null
+    }
+
+    else -> null
+}
+
+private fun Any?.toJsonElement(): JsonElement = when (this) {
+    null -> JsonNull
+    is JsonElement -> this
+    is String -> JsonPrimitive(this)
+    is Number -> JsonPrimitive(this)
+    is Boolean -> JsonPrimitive(this)
+    is Map<*, *> -> JsonObject(
+        entries.associate { (key, value) -> key.toString() to value.toJsonElement() }
+    )
+
+    is Iterable<*> -> JsonArray(map { it.toJsonElement() })
+    is Array<*> -> JsonArray(map { it.toJsonElement() })
+    else -> JsonPrimitive(toString())
+}
+
+/**
+ * CustomOpenAI chat-completions parameters layered on top of [LLMParams].
+ *
+ * @property temperature Sampling temperature in [0.0, 2.0]. Higher ⇒ more random;
+ *   lower ⇒ more deterministic. Adjust this **or** [topP], not both.
+ * @property maxTokens Maximum number of tokens the model may generate for this response.
+ * @property numberOfChoices Number of completions to generate for the prompt (cost scales with N).
+ * @property speculation Provider-specific control for speculative decoding / draft acceleration.
+ * @property schema JSON Schema to constrain model output (validated when supported).
+ * @property toolChoice Controls if/which tool must be called (`none`/`auto`/`required`/specific).
+ * @property user stable end-user identifier
+ * @property additionalProperties Additional properties that can be used to store custom parameters.
+ * @property frequencyPenalty Number in [-2.0, 2.0]—penalizes frequent tokens to reduce repetition.
+ * @property presencePenalty Number in [-2.0, 2.0]—encourages introduction of new tokens/topics.
+ * @property logprobs Whether to include log-probabilities for output tokens.
+ * @property stop Stop sequences (0–4 items); generation halts before any of these.
+ * @property topLogprobs Number of top alternatives per position (0–20). Requires [logprobs] = true.
+ * @property topP Nucleus sampling in (0.0, 1.0]; use **instead of** [temperature].
+ * @property topK Number of top tokens to consider when generating output (min 1).
+ * @property repetitionPenalty Number in (0.0, 2.0] — penalizes token repetition.
+ * @property minP Minimum cumulative probability for token inclusion in sampling.
+ * @property topA Temperature scaling based on marginal probability gain.
+ * @property transforms List of context transforms.
+ *   Defines how context is transformed when it exceeds the model's token limit.
+ *   Default is ["middle-out"] which truncates from the middle of the prompt.
+ *   Use empty list [] for no transformations.
+ * @property models List of allowed models for this request.
+ * @property route Request routing identifier.
+ */
+public open class CustomOpenAIParams(
+    temperature: Double? = null,
+    maxTokens: Int? = null,
+    numberOfChoices: Int? = null,
+    speculation: String? = null,
+    schema: Schema? = null,
+    toolChoice: ToolChoice? = null,
+    user: String? = null,
+    additionalProperties: Map<String, JsonElement>? = null,
+    public val frequencyPenalty: Double? = null,
+    public val presencePenalty: Double? = null,
+    public val logprobs: Boolean? = null,
+    public val stop: List<String>? = null,
+    public val topLogprobs: Int? = null,
+    public val topP: Double? = null,
+    public val topK: Int? = null,
+    public val repetitionPenalty: Double? = null,
+    public val minP: Double? = null,
+    public val topA: Double? = null,
+    public val transforms: List<String>? = null,
+    public val models: List<String>? = null,
+    public val route: String? = null,
+) : LLMParams(
+    temperature, maxTokens, numberOfChoices,
+    speculation, schema, toolChoice,
+    user, additionalProperties
+) {
+    init {
+        require(topP == null || topP in 0.0..1.0) {
+            "topP must be in (0.0, 1.0], but was $topP"
+        }
+        if (topLogprobs != null) {
+            require(logprobs == true) {
+                "`topLogprobs` requires `logprobs=true`."
+            }
+            require(topLogprobs in 0..20) {
+                "topLogprobs must be in [0, 20], but was $topLogprobs"
+            }
+        }
+        require(frequencyPenalty == null || frequencyPenalty in -2.0..2.0) {
+            "frequencyPenalty must be in [-2.0, 2.0], but was $frequencyPenalty"
+        }
+        require(presencePenalty == null || presencePenalty in -2.0..2.0) {
+            "presencePenalty must be in [-2.0, 2.0], but was $presencePenalty"
+        }
+        require(repetitionPenalty == null || repetitionPenalty in 0.0..2.0) {
+            "repetitionPenalty must be in (0.0, 2.0], but was $repetitionPenalty"
+        }
+        require(topK == null || topK >= 1) {
+            "topK must be in [1, Infinity], but was $topK"
+        }
+        require(minP == null || minP in 0.0..1.0) {
+            "minP must be in [0.0, 1.0], but was $minP"
+        }
+        require(topA == null || topA in 0.0..1.0) {
+            "topA must be in [0.0, 1.0], but was $topA"
+        }
+
+        // --- Stop sequences ---
+        if (stop != null) {
+            require(stop.isNotEmpty()) { "stop must not be empty when provided." }
+            require(stop.size <= 4) { "stop supports at most 4 sequences, but was ${stop.size}" }
+            require(stop.all { it.isNotBlank() }) { "stop sequences must not be blank." }
+        }
+    }
+
+    /**
+     * Creates a copy of this instance with the ability to modify any of its properties.
+     */
+    public fun copy(
+        temperature: Double? = this.temperature,
+        maxTokens: Int? = this.maxTokens,
+        speculation: String? = this.speculation,
+        schema: Schema? = this.schema,
+        toolChoice: ToolChoice? = this.toolChoice,
+        user: String? = this.user,
+        additionalProperties: Map<String, JsonElement>? = this.additionalProperties,
+        frequencyPenalty: Double? = this.frequencyPenalty,
+        presencePenalty: Double? = this.presencePenalty,
+        logprobs: Boolean? = this.logprobs,
+        stop: List<String>? = this.stop,
+        topLogprobs: Int? = this.topLogprobs,
+        topP: Double? = this.topP,
+        topK: Int? = this.topK,
+        repetitionPenalty: Double? = this.repetitionPenalty,
+        minP: Double? = this.minP,
+        topA: Double? = this.topA,
+        transforms: List<String>? = this.transforms,
+        models: List<String>? = this.models,
+        route: String? = this.route,
+    ): CustomOpenAIParams = CustomOpenAIParams(
+        temperature = temperature,
+        maxTokens = maxTokens,
+        speculation = speculation,
+        schema = schema,
+        toolChoice = toolChoice,
+        user = user,
+        additionalProperties = additionalProperties,
+        frequencyPenalty = frequencyPenalty,
+        presencePenalty = presencePenalty,
+        logprobs = logprobs,
+        stop = stop,
+        topLogprobs = topLogprobs,
+        topP = topP,
+        topK = topK,
+        repetitionPenalty = repetitionPenalty,
+        minP = minP,
+        topA = topA,
+        transforms = transforms,
+        models = models,
+        route = route,
+    )
+
+    override fun equals(other: Any?): Boolean = when {
+        this === other -> true
+        other !is CustomOpenAIParams -> false
+        else ->
+            temperature == other.temperature &&
+                    maxTokens == other.maxTokens &&
+                    numberOfChoices == other.numberOfChoices &&
+                    speculation == other.speculation &&
+                    schema == other.schema &&
+                    toolChoice == other.toolChoice &&
+                    user == other.user &&
+                    additionalProperties == other.additionalProperties &&
+                    frequencyPenalty == other.frequencyPenalty &&
+                    presencePenalty == other.presencePenalty &&
+                    logprobs == other.logprobs &&
+                    stop == other.stop &&
+                    topLogprobs == other.topLogprobs &&
+                    topP == other.topP &&
+                    topK == other.topK &&
+                    repetitionPenalty == other.repetitionPenalty &&
+                    minP == other.minP &&
+                    topA == other.topA &&
+                    transforms == other.transforms &&
+                    models == other.models &&
+                    route == other.route
+    }
+
+    override fun hashCode(): Int = listOf(
+        temperature, maxTokens, numberOfChoices,
+        speculation, schema, toolChoice,
+        user,
+        additionalProperties, frequencyPenalty, presencePenalty,
+        logprobs, stop, topLogprobs, topP,
+        topK, repetitionPenalty, minP,
+        topA, transforms, models, route,
+    ).fold(0) { acc, element ->
+        31 * acc + (element?.hashCode() ?: 0)
+    }
+
+    override fun toString(): String = buildString {
+        append("CustomOpenAIParams(")
+        append("temperature=$temperature")
+        append(", maxTokens=$maxTokens")
+        append(", numberOfChoices=$numberOfChoices")
+        append(", speculation=$speculation")
+        append(", schema=$schema")
+        append(", toolChoice=$toolChoice")
+        append(", user=$user")
+        append(", additionalProperties=$additionalProperties")
+        append(", frequencyPenalty=$frequencyPenalty")
+        append(", presencePenalty=$presencePenalty")
+        append(", logprobs=$logprobs")
+        append(", stop=$stop")
+        append(", topLogprobs=$topLogprobs")
+        append(", topP=$topP")
+        append(", topK=$topK")
+        append(", repetitionPenalty=$repetitionPenalty")
+        append(", minP=$minP")
+        append(", topA=$topA")
+        append(", transforms=$transforms")
+        append(", models=$models")
+        append(", route=$route")
+        append(")")
+    }
+}

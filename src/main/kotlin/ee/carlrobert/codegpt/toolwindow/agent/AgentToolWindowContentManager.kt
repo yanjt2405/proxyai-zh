@@ -1,0 +1,157 @@
+package ee.carlrobert.codegpt.toolwindow.agent
+
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.wm.ToolWindowManager
+import ee.carlrobert.codegpt.agent.AgentService
+import ee.carlrobert.codegpt.agent.history.AgentHistoryThreadSummary
+import ee.carlrobert.codegpt.agent.history.CheckpointRef
+import ee.carlrobert.codegpt.conversations.Conversation
+import java.util.*
+import ai.koog.prompt.message.Message as PromptMessage
+
+@Service(Service.Level.PROJECT)
+class AgentToolWindowContentManager(private val project: Project) : Disposable {
+
+    private val activeSessions = mutableMapOf<String, AgentSession>()
+    private val tabPanels = mutableMapOf<String, AgentToolWindowTabPanel>()
+    private val autoApprovedSessions = mutableSetOf<String>()
+    private val tabbedPane = AgentToolWindowTabbedPane(project)
+
+    fun initializeTabbedPane(): AgentToolWindowTabbedPane {
+        project.messageBus.connect()
+            .subscribe(AgentTabTitleNotifier.AGENT_TAB_TITLE_TOPIC, object : AgentTabTitleNotifier {
+                override fun updateTabTitle(sessionId: String, title: String) {
+                    renameTab(sessionId, title)
+                }
+            })
+
+        return tabbedPane
+    }
+
+    fun createNewAgentTab(select: Boolean = true): AgentToolWindowTabPanel {
+        return createNewAgentTab(AgentSession(UUID.randomUUID().toString(), Conversation()), select)
+    }
+
+    fun createNewAgentTab(session: AgentSession, select: Boolean = true): AgentToolWindowTabPanel {
+        val tabPanel = AgentToolWindowTabPanel(project, session)
+        activeSessions[session.sessionId] = session
+        tabPanels[session.sessionId] = tabPanel
+        tabbedPane.addNewTab(tabPanel, select)
+        return tabPanel
+    }
+
+    fun openCheckpointConversation(
+        thread: AgentHistoryThreadSummary,
+        conversation: Conversation,
+        checkpointRef: CheckpointRef
+    ): AgentToolWindowTabPanel {
+        selectAgentTab()
+        findOpenTabByAgentId(thread.agentId)?.let { existing ->
+            tabbedPane.selectSession(existing.getSessionId())
+            return existing
+        }
+        val recoveredName = thread.title.ifBlank { "Recovered ${thread.agentId.take(8)}" }
+        val session = AgentSession(
+            sessionId = UUID.randomUUID().toString(),
+            conversation = conversation,
+            displayName = recoveredName,
+            agentId = checkpointRef.agentId,
+            resumeCheckpointRef = checkpointRef
+        )
+        return createNewAgentTab(session, select = true)
+    }
+
+    private fun selectAgentTab() {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("ProxyAI") ?: return
+        toolWindow.show()
+
+        val contentManager = toolWindow.contentManager
+        val agentContent = contentManager.contents.firstOrNull { it.tabName == "Agent" }
+            ?: contentManager.getContent(0)
+        if (agentContent != null) {
+            contentManager.setSelectedContent(agentContent)
+        }
+    }
+
+    fun getActiveTabPanel(): AgentToolWindowTabPanel? {
+        return tabbedPane.tryFindActiveTabPanel().orElse(null)
+    }
+
+    fun getTabbedPane(): AgentToolWindowTabbedPane = tabbedPane
+
+    fun resetCurrentlyActiveTab() {
+        tabbedPane.resetCurrentlyActiveTabPanel()
+    }
+
+    fun renameTab(sessionId: String, newName: String) {
+        tabbedPane.tryFindTabTitle(sessionId).ifPresent { title ->
+            val tabIndex = tabbedPane.indexOfTab(title)
+            if (tabIndex >= 0) {
+                tabbedPane.renameTab(tabIndex, newName)
+            }
+        }
+    }
+
+    fun setTabStatus(sessionId: String, status: AgentToolWindowTabbedPane.TabStatus) {
+        tabbedPane.updateStatusForSession(sessionId, status)
+    }
+
+    fun markSessionAsAutoApproved(sessionId: String) {
+        autoApprovedSessions.add(sessionId)
+    }
+
+    fun isSessionAutoApproved(sessionId: String): Boolean {
+        return autoApprovedSessions.contains(sessionId)
+    }
+
+    fun removeSession(sessionId: String) {
+        activeSessions.remove(sessionId)
+        tabPanels.remove(sessionId)
+        autoApprovedSessions.remove(sessionId)
+        project.service<AgentService>().removeSession(sessionId)
+    }
+
+    @Synchronized
+    fun getSession(sessionId: String): AgentSession? = activeSessions[sessionId]
+
+    @Synchronized
+    fun findOpenTabByAgentId(agentId: String): AgentToolWindowTabPanel? {
+        val sessionId = activeSessions.values.firstOrNull { session ->
+            session.agentId == agentId || session.resumeCheckpointRef?.agentId == agentId
+        }?.sessionId ?: return null
+        return tabPanels[sessionId]
+    }
+
+    @Synchronized
+    fun setAgentId(sessionId: String, agentId: String?) {
+        activeSessions[sessionId]?.agentId = agentId
+    }
+
+    @Synchronized
+    fun setResumeCheckpointRef(sessionId: String, ref: CheckpointRef?) {
+        activeSessions[sessionId]?.resumeCheckpointRef = ref
+    }
+
+    @Synchronized
+    fun setSeededMessageHistory(sessionId: String, history: List<PromptMessage>?) {
+        activeSessions[sessionId]?.seededMessageHistory = history
+    }
+
+    companion object {
+        fun getInstance(project: Project): AgentToolWindowContentManager {
+            return project.service()
+        }
+    }
+
+    override fun dispose() {
+        tabPanels.values.forEach { tabPanel ->
+            Disposer.dispose(tabPanel)
+        }
+        tabPanels.clear()
+        activeSessions.clear()
+    }
+}

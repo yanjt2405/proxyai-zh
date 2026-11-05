@@ -1,0 +1,525 @@
+package ee.carlrobert.codegpt.ui.textarea.header
+
+import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.application.runInEdt
+import com.intellij.openapi.application.runUndoTransparentWriteAction
+import com.intellij.openapi.components.service
+import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.EditorKind
+import com.intellij.openapi.editor.SelectionModel
+import com.intellij.openapi.fileEditor.FileEditorManagerEvent
+import com.intellij.openapi.fileEditor.FileEditorManagerListener
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.JBMenuItem
+import com.intellij.openapi.ui.JBPopupMenu
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.components.JBLabel
+import com.intellij.util.IconUtil
+import com.intellij.util.ui.JBUI
+import ee.carlrobert.codegpt.CodeGPTBundle
+import ee.carlrobert.codegpt.EditorNotifier
+import ee.carlrobert.codegpt.settings.ProxyAISettingsService
+import ee.carlrobert.codegpt.settings.configuration.ConfigurationSettings
+import ee.carlrobert.codegpt.settings.service.FeatureType
+import ee.carlrobert.codegpt.toolwindow.chat.ChatContextSupport
+import ee.carlrobert.codegpt.toolwindow.chat.ui.textarea.TotalTokensPanel
+import ee.carlrobert.codegpt.ui.IconActionButton
+import ee.carlrobert.codegpt.ui.WrapLayout
+import ee.carlrobert.codegpt.ui.components.BadgeChip
+import ee.carlrobert.codegpt.ui.components.InlineEditChips
+import ee.carlrobert.codegpt.ui.textarea.PromptTextField
+import ee.carlrobert.codegpt.ui.textarea.TagDetailsComparator
+import ee.carlrobert.codegpt.ui.textarea.header.tag.*
+import ee.carlrobert.codegpt.util.EditorUtil
+import ee.carlrobert.codegpt.util.EditorUtil.getSelectedEditor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import java.awt.*
+import java.awt.datatransfer.StringSelection
+import java.awt.event.ActionListener
+import javax.swing.JButton
+import javax.swing.JPanel
+import javax.swing.SwingUtilities
+
+class UserInputHeaderPanel(
+    private val project: Project,
+    private val tagManager: TagManager,
+    private val totalTokensPanel: TotalTokensPanel,
+    private val promptTextField: PromptTextField,
+    private val withRemovableSelectedEditorTag: Boolean,
+    private val onApply: (() -> Unit)? = null,
+    private val getMarkdownContent: (() -> String)? = null,
+    private val featureType: FeatureType? = null,
+    private val onLayoutChanged: () -> Unit = {}
+) : JPanel(WrapLayout(FlowLayout.LEFT, 4, 4)), TagManagerListener, McpTagUpdateListener {
+
+    companion object {
+        private const val INITIAL_VISIBLE_FILES = 2
+    }
+
+    private val emptyText = JBLabel(CodeGPTBundle.get("userInput.noContextIncluded")).apply {
+        foreground = JBUI.CurrentTheme.Label.disabledForeground()
+        font = JBUI.Fonts.smallFont()
+        isVisible = getSelectedEditor(project) == null
+        preferredSize = Dimension(preferredSize.width, 20)
+        verticalAlignment = JBLabel.CENTER
+    }
+
+    private val defaultHeaderTagsPanel = CustomFlowPanel().apply {
+        add(AddButton {
+            CoroutineScope(Dispatchers.Main + SupervisorJob()).launch {
+                promptTextField.requestFocus()
+
+                // TODO: Replace with promptTextField.showGroupLookup()
+                runUndoTransparentWriteAction {
+                    val caretOffset = promptTextField.editor?.caretModel?.offset
+                        ?: return@runUndoTransparentWriteAction
+                    promptTextField.document.insertString(caretOffset, "@")
+                    promptTextField.editor?.caretModel?.moveToOffset(caretOffset + 1)
+                }
+            }
+        })
+        add(emptyText)
+    }
+
+    private val applyChip = onApply?.let { handler ->
+        BadgeChip(CodeGPTBundle.get("shared.apply"), InlineEditChips.GREEN, handler)
+            .apply { isVisible = false }
+    }
+
+    private val copyButton = IconActionButton(
+        object : AnAction(
+            CodeGPTBundle.get("shared.copy"),
+            CodeGPTBundle.get("shared.copyToClipboard"),
+            AllIcons.Actions.Copy
+        ) {
+            override fun actionPerformed(e: AnActionEvent) {
+                val text = getMarkdownContent?.invoke().orEmpty()
+                if (text.isNotEmpty()) {
+                    val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+                    clipboard.setContents(StringSelection(text), null)
+                }
+            }
+
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+            override fun update(e: AnActionEvent) {
+                e.presentation.isEnabled = !getMarkdownContent?.invoke().isNullOrEmpty()
+            }
+        },
+        "COPY_MD"
+    ).apply { isVisible = getMarkdownContent != null }
+
+    private val backgroundScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val settingsService = project.service<ProxyAISettingsService>()
+
+    init {
+        tagManager.addListener(this)
+        initializeUI()
+        initializeEventListeners()
+    }
+
+    fun getSelectedTags(): List<TagDetails> =
+        tagManager.getEffectiveTags().filter { it.selected }.toMutableList()
+
+    fun getLastTag(): TagDetails? {
+        return tagManager.getEffectiveTags()
+            .sortedWith(TagDetailsComparator())
+            .lastOrNull()
+    }
+
+    fun addTag(tagDetails: TagDetails) {
+        if (!isTagVisible(tagDetails)) {
+            return
+        }
+        tagManager.addTag(tagDetails)
+    }
+
+    override fun updateMcpTagInPlace(tagDetails: McpTagDetails): Boolean {
+        val mcpPanels = components.filterIsInstance<McpTagPanel>()
+        if (mcpPanels.isEmpty()) {
+            val indirectPanels = defaultHeaderTagsPanel.components.filterIsInstance<McpTagPanel>()
+            mcpPanels.plus(indirectPanels)
+        }
+
+        val existingPanel = mcpPanels.find { panel ->
+            val panelTag = panel.tagDetails as? McpTagDetails
+            panelTag?.serverId == tagDetails.serverId
+        }
+
+        return if (existingPanel != null) {
+            runInEdt {
+                existingPanel.updateMcpTag(tagDetails)
+            }
+
+            SwingUtilities.invokeLater {
+                invalidate()
+                revalidate()
+                repaint()
+                onLayoutChanged()
+
+                parent?.let {
+                    it.invalidate()
+                    it.revalidate()
+                    it.repaint()
+                }
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    override fun onTagAdded(tag: TagDetails) {
+        onTagsChanged()
+        if (affectsReferencedFiles(tag)) {
+            refreshReferencedFilesTotal()
+        }
+    }
+
+    override fun onTagRemoved(tag: TagDetails) {
+        onTagsChanged()
+        if (affectsReferencedFiles(tag)) {
+            refreshReferencedFilesTotal()
+        }
+    }
+
+    override fun onTagUpdated(tag: TagDetails) {
+        if (affectsReferencedFiles(tag)) {
+            refreshReferencedFilesTotal()
+        }
+    }
+
+    override fun onTagSelectionChanged(tag: TagDetails, selectionModel: SelectionModel) {
+        when (tag) {
+            is EditorSelectionTagDetails -> {
+                components.filterIsInstance<SelectionTagPanel>().forEach { panel ->
+                    val td = panel.tagDetails
+                    if (td is EditorSelectionTagDetails && td.virtualFile == tag.virtualFile) {
+                        panel.update(
+                            "${tag.virtualFile.name}:${selectionModel.selectionStart}-${selectionModel.selectionEnd}",
+                            tag.virtualFile.fileType.icon
+                        )
+                    }
+                }
+            }
+
+            is SelectionTagDetails -> {
+                components.filterIsInstance<SelectionTagPanel>().forEach { panel ->
+                    panel.update(
+                        "${tag.virtualFile.name}:${selectionModel.selectionStart}-${selectionModel.selectionEnd}",
+                        tag.virtualFile.fileType.icon
+                    )
+                }
+            }
+
+            else -> Unit
+        }
+    }
+
+    private fun onTagsChanged() {
+        components.filterIsInstance<TagPanel>().forEach { remove(it) }
+
+        val tags = tagManager.getEffectiveTags()
+            .sortedWith(TagDetailsComparator())
+            .toSet()
+
+        emptyText.isVisible = tags.isEmpty()
+
+        tags.forEach { add(createTagPanel(it)) }
+
+        revalidate()
+        repaint()
+        onLayoutChanged()
+    }
+
+    private fun createTagPanel(tagDetails: TagDetails) =
+        (when (tagDetails) {
+            is EditorSelectionTagDetails -> SelectionTagPanel(tagDetails, promptTextField, project)
+            is McpTagDetails -> McpTagPanel(tagDetails, tagManager, promptTextField, project)
+            else -> object : TagPanel(tagDetails, false, project) {
+
+                init {
+                    cursor = if (tagDetails is FileTagDetails)
+                        Cursor(Cursor.HAND_CURSOR)
+                    else
+                        Cursor(Cursor.DEFAULT_CURSOR)
+                }
+
+                override fun onSelect(tagDetails: TagDetails) {
+                    SwingUtilities.invokeLater {
+                        onTagsChanged()
+                        tagManager.notifyTagUpdated(tagDetails)
+                    }
+                }
+
+                override fun onClose() {
+                    tagManager.remove(tagDetails)
+                }
+            }
+        }).apply {
+            componentPopupMenu = TagPopupMenu()
+        }
+
+    private fun initializeUI() {
+        isOpaque = false
+        border = JBUI.Borders.empty()
+
+        add(defaultHeaderTagsPanel)
+        applyChip?.let { add(it) }
+        add(copyButton)
+        addInitialTags()
+    }
+
+    private fun addInitialTags() {
+        if (featureType == FeatureType.AGENT) {
+            return
+        }
+
+        val autoTaggingEnabled =
+            ConfigurationSettings.getState().chatCompletionSettings.editorContextTagEnabled
+        if (autoTaggingEnabled) {
+            val selectedFile = getSelectedEditor(project)?.virtualFile
+            if (selectedFile != null) {
+                addTag(
+                    EditorTagDetails(
+                        selectedFile,
+                        isRemovable = withRemovableSelectedEditorTag
+                    )
+                )
+            }
+
+            EditorUtil.getOpenLocalFiles(project)
+                .filterNot { it == selectedFile }
+                .take(INITIAL_VISIBLE_FILES)
+                .forEach {
+                    addTag(EditorTagDetails(it).apply { selected = false })
+                }
+        }
+    }
+
+    private fun refreshReferencedFilesTotal() {
+        backgroundScope.launch {
+            val selectedTags = getSelectedTags()
+            val referencedFileContents =
+                ChatContextSupport.getReferencedFiles(project, selectedTags)
+                    .map { it.fileContent }
+            runInEdt {
+                totalTokensPanel.updateReferencedFilesTokens(referencedFileContents)
+            }
+        }
+    }
+
+    private fun affectsReferencedFiles(tag: TagDetails): Boolean {
+        return tag is FileTagDetails || tag is EditorTagDetails || tag is FolderTagDetails
+    }
+
+    private fun initializeEventListeners() {
+        project.messageBus.connect().apply {
+            subscribe(EditorNotifier.SelectionChange.TOPIC, EditorSelectionChangeListener())
+            subscribe(EditorNotifier.Released.TOPIC, EditorReleasedListener())
+            subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, FileSelectionListener())
+        }
+    }
+
+    private class AddButton(onAdd: () -> Unit) : JButton() {
+        init {
+            addActionListener {
+                onAdd()
+            }
+
+            cursor = Cursor(Cursor.HAND_CURSOR)
+            preferredSize = Dimension(20, 20)
+            isContentAreaFilled = false
+            isOpaque = false
+            border = null
+            toolTipText = CodeGPTBundle.get("userInput.addContextTooltip")
+            icon = IconUtil.scale(AllIcons.General.InlineAdd, null, 0.75f)
+            rolloverIcon = IconUtil.scale(AllIcons.General.InlineAddHover, null, 0.75f)
+            pressedIcon = IconUtil.scale(AllIcons.General.InlineAddHover, null, 0.75f)
+        }
+
+        override fun paintComponent(g: Graphics) {
+            val selectedVisually = isEnabled
+            PaintUtil.drawRoundedBackground(g, this, selectedVisually)
+            super.paintComponent(g)
+        }
+    }
+
+    private inner class EditorSelectionChangeListener : EditorNotifier.SelectionChange {
+        override fun selectionChanged(selectionModel: SelectionModel, virtualFile: VirtualFile) {
+            handleSelectionChange(selectionModel, virtualFile)
+        }
+
+        private fun handleSelectionChange(
+            selectionModel: SelectionModel,
+            virtualFile: VirtualFile
+        ) {
+            if (selectionModel.hasSelection()) {
+                val hasSelectionTag = tagManager.getTags()
+                    .any { it is EditorSelectionTagDetails && it.virtualFile == virtualFile }
+                if (hasSelectionTag) {
+                    tagManager.updateSelectionTag(virtualFile, selectionModel)
+                } else {
+                    addTag(EditorSelectionTagDetails(virtualFile, selectionModel))
+                }
+            } else {
+                tagManager.remove(EditorSelectionTagDetails(virtualFile, selectionModel))
+            }
+
+        }
+    }
+
+    private inner class EditorReleasedListener : EditorNotifier.Released {
+        override fun editorReleased(editor: Editor) {
+            if (editor.editorKind == EditorKind.MAIN_EDITOR && !editor.isDisposed && editor.virtualFile != null) {
+                editor.virtualFile?.let { tagManager.remove(EditorTagDetails(it)) }
+            }
+        }
+    }
+
+    private inner class FileSelectionListener : FileEditorManagerListener {
+        override fun selectionChanged(event: FileEditorManagerEvent) {
+            if (!ConfigurationSettings.getState().chatCompletionSettings.editorContextTagEnabled) {
+                return
+            }
+            event.newFile?.let { newFile ->
+                // Maintain a rolling list of up to 2 unselected tags for recently visited files.
+                val existing = tagManager.getTags()
+                    .filterIsInstance<EditorTagDetails>()
+                    .firstOrNull { it.virtualFile == newFile }
+
+                if (existing == null) {
+                    addTag(EditorTagDetails(newFile).apply { selected = false })
+                } else if (!existing.selected) {
+                    tagManager.remove(existing)
+                    addTag(EditorTagDetails(newFile).apply { selected = false })
+                }
+
+                emptyText.isVisible = false
+            }
+        }
+    }
+
+    private fun isTagVisible(tagDetails: TagDetails): Boolean {
+        return when (tagDetails) {
+            is FileTagDetails -> settingsService.isVirtualFileVisible(tagDetails.virtualFile)
+            is EditorTagDetails -> settingsService.isVirtualFileVisible(tagDetails.virtualFile)
+            is SelectionTagDetails -> settingsService.isVirtualFileVisible(tagDetails.virtualFile)
+            is EditorSelectionTagDetails -> settingsService.isVirtualFileVisible(tagDetails.virtualFile)
+            is FolderTagDetails -> settingsService.isVirtualFileVisible(tagDetails.folder)
+            else -> true
+        }
+    }
+
+    private inner class TagPopupMenu : JBPopupMenu() {
+        private fun resolveTagPanel(from: Component): TagPanel? = when (from) {
+            is TagPanel -> from
+            else -> SwingUtilities.getAncestorOfClass(TagPanel::class.java, from) as? TagPanel
+        }
+
+        private val closeMenuItem =
+            createPopupMenuItem(CodeGPTBundle.get("tagPopupMenuItem.close")) {
+                resolveTagPanel(invoker)?.let {
+                    if (it.tagDetails.isRemovable) tagManager.remove(it.tagDetails)
+                }
+            }
+
+        private val closeOtherTagsMenuItem =
+            createPopupMenuItem(CodeGPTBundle.get("tagPopupMenuItem.closeOthers")) {
+                resolveTagPanel(invoker)?.let { currentPanel ->
+                    val currentTag = currentPanel.tagDetails
+                    tagManager.getTags()
+                        .filter { it != currentTag && it.isRemovable }
+                        .forEach { tagManager.remove(it) }
+                }
+            }
+
+        private val closeAllTagsMenuItem =
+            createPopupMenuItem(CodeGPTBundle.get("tagPopupMenuItem.closeAll")) {
+                tagManager.getTags()
+                    .filter { it.isRemovable }
+                    .forEach { tagManager.remove(it) }
+            }
+
+        private val closeTagsToLeftMenuItem =
+            createPopupMenuItem(CodeGPTBundle.get("tagPopupMenuItem.closeTagsToLeft")) {
+                closeTagsInRange { components, currentIndex ->
+                    if (currentIndex > 0) {
+                        components.take(currentIndex)
+                    } else {
+                        emptyList()
+                    }
+                }
+            }
+
+        private val closeTagsToRightMenuItem =
+            createPopupMenuItem(CodeGPTBundle.get("tagPopupMenuItem.closeTagsToRight")) {
+                closeTagsInRange { components, currentIndex ->
+                    if (currentIndex >= 0 && currentIndex < components.size - 1) {
+                        components.drop(currentIndex + 1)
+                    } else {
+                        emptyList()
+                    }
+                }
+            }
+
+        private fun closeTagsInRange(rangeSelector: (Array<Component>, Int) -> List<Component>) {
+            resolveTagPanel(invoker)?.let { currentPanel ->
+                val components = this@UserInputHeaderPanel.components
+                val currentIndex = components.indexOf(currentPanel)
+
+                rangeSelector(components, currentIndex)
+                    .filterIsInstance<TagPanel>()
+                    .map { it.tagDetails }
+                    .filter { it.isRemovable }
+                    .forEach { tagManager.remove(it) }
+            }
+        }
+
+        init {
+            add(closeMenuItem)
+            add(closeOtherTagsMenuItem)
+            add(closeAllTagsMenuItem)
+            add(closeTagsToLeftMenuItem)
+            add(closeTagsToRightMenuItem)
+        }
+
+        override fun show(invoker: Component, x: Int, y: Int) {
+            val tagPanel = resolveTagPanel(invoker) ?: return
+            if (!tagPanel.isEnabled) return
+            val components = this@UserInputHeaderPanel.components.filterIsInstance<TagPanel>()
+            val currentIndex = components.indexOf(tagPanel)
+
+            val removableLeft = if (currentIndex > 0) {
+                components.take(currentIndex).any { it.tagDetails.isRemovable }
+            } else false
+            val removableRight = if (currentIndex >= 0 && currentIndex < components.size - 1) {
+                components.drop(currentIndex + 1).any { it.tagDetails.isRemovable }
+            } else false
+            val removableOthers = components
+                .filterIndexed { index, _ -> index != currentIndex }
+                .any { it.tagDetails.isRemovable }
+            val anyRemovable = components.any { it.tagDetails.isRemovable }
+
+            closeMenuItem.isEnabled = tagPanel.tagDetails.isRemovable
+            closeTagsToLeftMenuItem.isEnabled = removableLeft
+            closeTagsToRightMenuItem.isEnabled = removableRight
+            closeOtherTagsMenuItem.isEnabled = removableOthers
+            closeAllTagsMenuItem.isEnabled = anyRemovable
+
+            super.show(tagPanel, x, y)
+        }
+
+        private fun createPopupMenuItem(label: String, listener: ActionListener): JBMenuItem {
+            val menuItem = JBMenuItem(label)
+            menuItem.addActionListener(listener)
+            return menuItem
+        }
+    }
+}

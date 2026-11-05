@@ -1,0 +1,177 @@
+package ee.carlrobert.codegpt.agent.tools
+
+import ai.koog.agents.core.tools.Tool
+import ai.koog.agents.core.tools.ToolDescriptor
+import ai.koog.serialization.typeToken
+import com.intellij.openapi.components.service
+import ee.carlrobert.codegpt.agent.AgentMcpContext
+import ee.carlrobert.codegpt.mcp.*
+import io.modelcontextprotocol.client.McpSyncClient
+import io.modelcontextprotocol.spec.McpSchema
+import kotlinx.serialization.json.JsonObject
+import java.util.*
+import ee.carlrobert.codegpt.mcp.McpTool as SessionMcpTool
+
+object McpDynamicToolRegistry {
+    fun createTools(
+        context: AgentMcpContext,
+        approve: suspend (name: String, details: String) -> Boolean
+    ): List<Tool<*, *>> {
+        val conversationId = context.conversationId ?: return emptyList()
+        if (!context.hasSelection()) return emptyList()
+
+        val selectedTags = context.selectedTags.ifEmpty {
+            context.selectedServerIds.map { serverId ->
+                ee.carlrobert.codegpt.ui.textarea.header.tag.McpTagDetails(
+                    serverId = serverId,
+                    serverName = serverId,
+                    connectionStatus = ConnectionStatus.DISCONNECTED
+                )
+            }
+        }
+        val resolution =
+            service<McpSelectionResolver>().ensureConnected(conversationId, selectedTags)
+        val attachments = resolution.attachments.filter { it.availableTools.isNotEmpty() }
+
+        if (attachments.isEmpty()) return emptyList()
+
+        return McpToolAliasResolver.resolve(
+            items = attachments.flatMap { attachment ->
+                attachment.availableTools.map { tool -> attachment to tool }
+            },
+            toolName = { (_, tool) -> tool.name },
+            scopeName = { (attachment, _) -> attachment.serverName.ifBlank { attachment.serverId } }
+        ).map { (entry, exposedName) ->
+            val (attachment, tool) = entry
+            SessionBoundMcpTool(
+                conversationId = conversationId,
+                serverId = attachment.serverId,
+                serverName = attachment.serverName,
+                sourceTool = tool,
+                exposedName = exposedName,
+                approve = approve
+            )
+        }
+    }
+
+}
+
+internal interface McpAgentToolMarker {
+    fun toDisplayArgs(args: JsonObject): McpTool.Args
+}
+
+private class SessionBoundMcpTool(
+    private val conversationId: UUID,
+    private val serverId: String,
+    private val serverName: String,
+    private val sourceTool: SessionMcpTool,
+    private val exposedName: String,
+    private val approve: suspend (name: String, details: String) -> Boolean
+) : Tool<JsonObject, McpTool.Result>(
+    argsType = typeToken<JsonObject>(),
+    resultType = typeToken<McpTool.Result>(),
+    descriptor = buildDescriptor(exposedName, sourceTool, serverName)
+), McpAgentToolMarker {
+    override suspend fun execute(args: JsonObject): McpTool.Result {
+        val details = buildMcpApprovalDetails(serverId, serverName, sourceTool.name, args)
+        val approved = runCatching { approve(exposedName, details) }.getOrDefault(false)
+        if (!approved) {
+            return errorResult("User rejected MCP tool execution")
+        }
+
+        val sessionManager = service<McpSessionManager>()
+        val clientKey = "$conversationId:$serverId"
+        val existingClient = runCatching {
+            sessionManager.ensureClientConnected(clientKey).get()
+        }.getOrNull()
+        if (existingClient != null) {
+            return runTool(existingClient, args)
+        }
+
+        val attachment = runCatching {
+            sessionManager.attachServerToSession(conversationId, serverId).get()
+        }.getOrElse { error ->
+            return errorResult(
+                "Failed to attach MCP server '$serverName': ${error.message ?: "unknown error"}"
+            )
+        }
+        if (attachment.connectionStatus != ConnectionStatus.CONNECTED) {
+            return errorResult("MCP server '$serverName' is not connected")
+        }
+
+        val client = runCatching {
+            val clientKey = "$conversationId:$serverId"
+            sessionManager.ensureClientConnected(clientKey).get()
+        }.getOrNull()
+            ?: return errorResult("MCP server '$serverName' is not connected")
+
+        return runTool(client, args)
+    }
+
+    override fun toDisplayArgs(args: JsonObject): McpTool.Args {
+        return McpTool.Args(
+            toolName = sourceTool.name,
+            serverId = serverId,
+            serverName = serverName,
+            arguments = args
+        )
+    }
+
+    private fun runTool(client: McpSyncClient, args: JsonObject): McpTool.Result {
+        return runCatching {
+            val callArgs = args.toMcpArguments()
+            val request = McpSchema.CallToolRequest(sourceTool.name, callArgs)
+            val result = client.callTool(request)
+            val content = result.formatMcpContent()
+            if (result.isError == true) {
+                errorResult("Tool execution failed: $content")
+            } else {
+                successResult(content)
+            }
+        }.getOrElse { error ->
+            errorResult(error.message ?: "MCP tool execution failed")
+        }
+    }
+
+    private fun successResult(output: String): McpTool.Result {
+        return McpTool.Result(
+            serverId = serverId,
+            serverName = serverName,
+            toolName = sourceTool.name,
+            success = true,
+            output = output
+        )
+    }
+
+    private fun errorResult(output: String): McpTool.Result {
+        return McpTool.Result.error(
+            toolName = sourceTool.name,
+            output = output,
+            serverId = serverId,
+            serverName = serverName
+        )
+    }
+}
+
+private fun buildDescriptor(
+    exposedName: String,
+    sourceTool: SessionMcpTool,
+    serverName: String
+): ToolDescriptor {
+    val description = buildString {
+        append(sourceTool.description.ifBlank { "MCP tool" })
+        append(" (server: ")
+        append(serverName)
+        append(')')
+    }
+    val allParameters = ToolSchemaParser.parseParameterDescriptors(sourceTool.schema)
+    val requiredNames = ToolSchemaParser.parseRequiredNames(sourceTool.schema).toSet()
+    val required = allParameters.filter { it.name in requiredNames }
+    val optional = allParameters.filterNot { it.name in requiredNames }
+    return ToolDescriptor(
+        name = exposedName,
+        description = description,
+        requiredParameters = required,
+        optionalParameters = optional
+    )
+}

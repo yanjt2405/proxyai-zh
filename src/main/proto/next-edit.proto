@@ -1,0 +1,33 @@
+// src/main/proto/edit.proto
+syntax = "proto3";
+option java_multiple_files = true;
+option java_package = "ee.carlrobert.service";
+
+import "google/protobuf/empty.proto";
+
+service NextEditServiceImpl {
+  rpc NextEdit (NextEditRequest) returns (stream NextEditResponse);
+  rpc AcceptEdit (AcceptEditRequest) returns (google.protobuf.Empty);
+}
+
+message NextEditRequest {
+  string file_content = 1;
+  string file_name = 2;
+  int32 cursor_position = 3;
+  string git_diff = 4;
+  map<string, string> recently_viewed_files = 5;
+  string plugin_version = 6;
+}
+
+message NextEditResponse {
+  string id = 1;
+  string next_revision = 2;
+  string old_revision = 3;
+}
+
+message AcceptEditRequest {
+  string response_id = 1;
+  string old_hunk = 2;
+  string new_hunk = 3;
+  int32 cursor_position = 4;
+}

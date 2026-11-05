@@ -1,0 +1,76 @@
+---
+title: Available Models
+description: Learn which model catalogs the plugin currently exposes for ProxyAI, Inception, and the other built-in providers.
+---
+
+# Models
+
+ProxyAI connects you to powerful large language models (LLMs) for chat and code generation.
+
+## Selecting a Model
+
+You can choose your preferred model in two ways:
+
+### From the Chat Window:
+
+Use the model dropdown in the Chat or Agent toolwindow to switch the active model for the current conversation. This is the fastest way to try a different model while you work.
+
+<video
+    src="https://proxyai-assets.s3.eu-central-1.amazonaws.com/videos/selecting-model-dropdown.mp4"
+    alt="Selecting a model using the dropdown in the chat window"
+    width="1200"
+    height="800"
+    className="nx-rounded-lg nx-my-4"
+    autoPlay
+    muted
+    loop
+/>
+
+### From Settings:
+
+Go to **Settings/Preferences > Tools > ProxyAI > Models** to manage model selection per feature. From this page, you can configure separate models for Chat, Agent, Autocomplete, Next-Edit Suggestions, and the other model-backed features, depending on which providers you have enabled.
+
+## Built-In Model Catalogs
+
+The tables below reflect the models currently exposed by ProxyAI Cloud. Models for `Ollama`, `llama.cpp`, `Custom OpenAI`, and other BYOK providers are determined by the configured provider and may change independently, so for those providers you should check the model picker in ProxyAI settings for the current list.
+
+### Agent & Chat Models
+
+| Model | Provider | Free | Pro |
+|---|---|:---:|:---:|
+| `auto` | Fireworks | ✅ | ✅ |
+| `gpt-5.4` | OpenAI |  | ✅ |
+| `gpt-5.3-codex` | OpenAI |  | ✅ |
+| `gpt-5-mini` | OpenAI | ✅ | ✅ |
+| `claude-opus-4-6` | Anthropic |  | ✅ |
+| `claude-sonnet-4-6` | Anthropic |  | ✅ |
+| `claude-haiku-4-5` | Anthropic | ✅ | ✅ |
+| `gemini-3.1-pro-preview` | Google |  | ✅ |
+| `gemini-3-flash-preview` | Google | ✅ | ✅ |
+
+`auto` is a dynamic selection and may change over time. ProxyAI chooses the model automatically based on the best quality-to-price ratio. It currently routes through Fireworks and uses `GLM-5`.
+
+### Code Models
+
+| Model | Provider | Free | Pro | Type |
+|---|---|:---:|:---:|---|
+| `mercury-edit-2` | Inception | ✅ | ✅ | [Tab](/features/tab) |
+
+*Note: Model availability may change over time. When using your own API key, availability depends on the provider's offerings.*
+
+## Context Windows
+
+A model's context window defines how much information (measured in tokens) it can process at once, including both your inputs and the model's responses.
+
+- Managed providers such as ProxyAI Cloud can apply product-level limits in addition to the underlying model limits.
+- Bring-your-own-key providers follow the limits of the selected upstream model and API.
+- Local and custom providers depend on the model and server configuration you run.
+- Large files and long conversations still benefit from keeping context focused, even when a model advertises a large context window.
+
+For complex or distinct tasks, regardless of the provider, starting a new chat session can improve performance and relevance.
+
+## Model Hosting and Privacy
+
+All **ProxyAI Cloud** models are hosted by their original providers (OpenAI, Anthropic, etc.), trusted partners, or ProxyAI directly, primarily on US-based infrastructure.
+
+When connecting to other providers or using local models, hosting location and privacy considerations follow those specific services or your local environment settings.

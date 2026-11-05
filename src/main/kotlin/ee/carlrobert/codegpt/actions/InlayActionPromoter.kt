@@ -1,0 +1,36 @@
+package ee.carlrobert.codegpt.actions
+
+import com.intellij.openapi.actionSystem.ActionPromoter
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.DataContext
+import ee.carlrobert.codegpt.CodeGPTKeys
+import ee.carlrobert.codegpt.actions.editor.AcceptInlineEditAction
+import ee.carlrobert.codegpt.actions.editor.InlineEditContextMenuAction
+import ee.carlrobert.codegpt.actions.editor.InlineEditFloatingMenuAction
+import ee.carlrobert.codegpt.inlineedit.AcceptCurrentInlineEditAction
+import ee.carlrobert.codegpt.inlineedit.RejectCurrentInlineEditAction
+import ee.carlrobert.codegpt.nextedit.TriggerNextEditAction
+
+class InlayActionPromoter : ActionPromoter {
+    override fun promote(actions: List<AnAction>, context: DataContext): List<AnAction> {
+        val editor = CommonDataKeys.EDITOR.getData(context) ?: return emptyList()
+
+        if (editor.document.textLength > 0) {
+            actions.filterIsInstance<InlineEditContextMenuAction>().takeIf { it.isNotEmpty() }?.let { return it }
+            actions.filterIsInstance<InlineEditFloatingMenuAction>().takeIf { it.isNotEmpty() }?.let { return it }
+        }
+
+        val hasInlineEdit = editor.getUserData(CodeGPTKeys.EDITOR_INLINE_EDIT_SESSION) != null ||
+                editor.getUserData(CodeGPTKeys.EDITOR_INLINE_EDIT_RENDERER) != null
+        if (hasInlineEdit) {
+            actions.filterIsInstance<AcceptInlineEditAction>().takeIf { it.isNotEmpty() }?.let { return it }
+            actions.filterIsInstance<AcceptCurrentInlineEditAction>().takeIf { it.isNotEmpty() }?.let { return it }
+            actions.filterIsInstance<RejectCurrentInlineEditAction>().takeIf { it.isNotEmpty() }?.let { return it }
+        }
+
+        actions.filterIsInstance<TriggerNextEditAction>().takeIf { it.isNotEmpty() }?.let { return it }
+
+        return emptyList()
+    }
+}
