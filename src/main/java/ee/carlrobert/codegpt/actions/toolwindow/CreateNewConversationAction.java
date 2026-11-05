@@ -4,6 +4,7 @@ import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import ee.carlrobert.codegpt.actions.ActionType;
+import ee.carlrobert.codegpt.CodeGPTBundle;
 import ee.carlrobert.codegpt.actions.editor.EditorActionsUtil;
 import ee.carlrobert.codegpt.telemetry.TelemetryAction;
 import org.jetbrains.annotations.NotNull;
@@ -13,7 +14,7 @@ public class CreateNewConversationAction extends AnAction {
   private final Runnable onCreate;
 
   public CreateNewConversationAction(Runnable onCreate) {
-    super("Create New Chat", "Create new chat", AllIcons.General.Add);
+    super(CodeGPTBundle.get("chat.new"), CodeGPTBundle.get("chat.new.description"), AllIcons.General.Add);
     this.onCreate = onCreate;
     EditorActionsUtil.registerAction(this);
   }

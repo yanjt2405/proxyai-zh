@@ -7,6 +7,7 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentManagerEvent
 import com.intellij.ui.content.ContentManagerListener
+import ee.carlrobert.codegpt.CodeGPTBundle
 import ee.carlrobert.codegpt.toolwindow.agent.AgentToolWindowPanel
 import ee.carlrobert.codegpt.toolwindow.chat.ChatToolWindowPanel
 import ee.carlrobert.codegpt.toolwindow.history.ChatHistoryToolWindow
@@ -21,17 +22,17 @@ class ProxyAIToolWindowFactory : ToolWindowFactory, DumbAware {
         val chatToolWindowPanel = ChatToolWindowPanel(project, toolWindow.disposable)
         val chatHistoryToolWindow = ChatHistoryToolWindow(project)
 
-        addContent(toolWindow, agentToolWindowPanel, "Agent")
-        addContent(toolWindow, chatToolWindowPanel, "Chat")
-        addContent(toolWindow, chatHistoryToolWindow.getContent(), "Chat History")
+        addContent(toolWindow, agentToolWindowPanel, CodeGPTBundle.get("toolWindow.tab.agent"))
+        addContent(toolWindow, chatToolWindowPanel, CodeGPTBundle.get("toolWindow.tab.chat"))
+        addContent(toolWindow, chatHistoryToolWindow.getContent(), CodeGPTBundle.get("toolWindow.tab.history"))
 
         toolWindow.addContentManagerListener(object : ContentManagerListener {
             override fun selectionChanged(event: ContentManagerEvent) {
-                if ("Chat History" == event.content.tabName && event.content.isSelected) {
+                if (CodeGPTBundle.get("toolWindow.tab.history") == event.content.tabName && event.content.isSelected) {
                     chatHistoryToolWindow.refresh()
                 }
 
-                if (event.content.tabName == "Agent" && !event.content.isSelected) {
+                if (event.content.tabName == CodeGPTBundle.get("toolWindow.tab.agent") && !event.content.isSelected) {
                     agentToolWindowPanel.getTabbedPane().onTabHidden()
                 }
             }

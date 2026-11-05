@@ -8,6 +8,7 @@ import ai.koog.prompt.message.ContentPart
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import ee.carlrobert.codegpt.CodeGPTBundle
 import ee.carlrobert.codegpt.completions.CompletionRequestFactory.Companion.MAX_RECENTLY_VIEWED_SNIPPETS
 import ee.carlrobert.codegpt.completions.CompletionRequestFactory.Companion.RECENTLY_VIEWED_LINES
 import ee.carlrobert.codegpt.completions.factory.*
@@ -199,6 +200,9 @@ abstract class BaseRequestFactory : CompletionRequestFactory {
                         filteredPrompts.applyClickableLinks(baseInstructions)
                     if (clickableInstructions.isNotBlank()) {
                         systemParts.add(clickableInstructions)
+                    }
+                    if (selectedPersona.id == PersonasState.DEFAULT_PERSONA_ID) {
+                        systemParts.add(CodeGPTBundle.get("methodActions.replyChinese"))
                     }
                 }
             }

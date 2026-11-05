@@ -6,6 +6,7 @@ import com.intellij.ui.components.ActionLink
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.components.BorderLayoutPanel
 import ee.carlrobert.codegpt.Icons
+import ee.carlrobert.codegpt.CodeGPTBundle
 import ee.carlrobert.codegpt.credentials.CredentialsStore
 import ee.carlrobert.codegpt.credentials.CredentialsStore.CredentialKey.CodeGptApiKey
 import ee.carlrobert.codegpt.settings.GeneralSettings
@@ -58,10 +59,10 @@ class ChatToolWindowLandingPanel(onAction: (LandingPanelAction, Point) -> Unit) 
                     """
                     <html>
                     <p style="margin-top: 4px; margin-bottom: 4px;">
-                      It looks like you haven't configured your API key yet. Visit <a href="#OPEN_SETTINGS">ProxyAI settings</a> to do so.
+                      ${CodeGPTBundle.get("landing.missingKey")}
                     </p>
                     <p style="margin-top: 4px; margin-bottom: 4px;">
-                      Don't have an account? <a href="https://tryproxy.io/signin">Sign up</a> to get started.
+                      ${CodeGPTBundle.get("landing.signUp")}
                     </p>
                     </html>
                     """.trimIndent(),
@@ -111,9 +112,7 @@ class ChatToolWindowLandingPanel(onAction: (LandingPanelAction, Point) -> Unit) 
     private fun getWelcomeMessage(): String {
         return """
             <html>
-            <p style="margin-top: 4px; margin-bottom: 4px;">
-            Hi <strong>${GeneralSettings.getCurrentState().displayName}</strong>, I'm ProxyAI! You can ask me anything, but most people request help with their code. Here are a few examples of what you can ask me:
-            </p>
+            <p style="margin-top: 4px; margin-bottom: 4px;">${CodeGPTBundle.get("landing.welcome", GeneralSettings.getCurrentState().displayName)}</p>
             </html>
         """.trimIndent()
     }
@@ -121,9 +120,7 @@ class ChatToolWindowLandingPanel(onAction: (LandingPanelAction, Point) -> Unit) 
     private fun getCautionMessage(): String {
         return """
             <html>
-            <p style="margin-top: 4px; margin-bottom: 4px;">
-            I can sometimes make mistakes, so please double-check anything critical.
-            </p>
+            <p style="margin-top: 4px; margin-bottom: 4px;">${CodeGPTBundle.get("landing.caution")}</p>
             </html>
         """.trimIndent()
     }
@@ -136,17 +133,17 @@ enum class LandingPanelAction(
 ) {
     FIND_BUGS(
         "Find Bugs",
-        "Find bugs in this code",
+        CodeGPTBundle.get("landing.findBugs"),
         ChatActionsState.DEFAULT_FIND_BUGS_PROMPT
     ),
     WRITE_TESTS(
         "Write Tests",
-        "Write unit tests for this code",
+        CodeGPTBundle.get("landing.writeTests"),
         ChatActionsState.DEFAULT_WRITE_TESTS_PROMPT
     ),
     EXPLAIN(
         "Explain",
-        "Explain the selected code",
+        CodeGPTBundle.get("landing.explain"),
         ChatActionsState.DEFAULT_EXPLAIN_PROMPT
     )
 }

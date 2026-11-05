@@ -1,5 +1,7 @@
 <idea-plugin>
   <extensions defaultExtensionNs="com.intellij">
+    <codeInsight.lineMarkerProvider language="kotlin"
+      implementationClass="ee.carlrobert.codegpt.actions.editor.KotlinMethodLineMarkerProvider"/>
     <applicationService
       serviceImplementation="ee.carlrobert.codegpt.psistructure.KotlinFileAnalyzer"/>
   </extensions>

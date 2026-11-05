@@ -129,7 +129,7 @@ public final class ChatToolWindowContentManager {
 
   private Optional<Content> tryFindFirstChatTabContent() {
     return Arrays.stream(getToolWindow().getContentManager().getContents())
-        .filter(content -> "Chat".equals(content.getTabName()))
+        .filter(content -> CodeGPTBundle.get("toolWindow.tab.chat").equals(content.getTabName()))
         .findFirst();
   }
 

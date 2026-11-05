@@ -8,6 +8,7 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.project.Project;
 import ee.carlrobert.codegpt.completions.CompletionRequestUtil;
+import ee.carlrobert.codegpt.CodeGPTBundle;
 import ee.carlrobert.codegpt.conversations.message.Message;
 import ee.carlrobert.codegpt.settings.prompts.PromptsSettings;
 import ee.carlrobert.codegpt.toolwindow.chat.ChatToolWindowContentManager;
@@ -37,7 +38,13 @@ public class EditorActionsUtil {
           .forEach((promptDetails) -> {
             // using label as action description to prevent com.intellij.diagnostic.PluginException
             // https://github.com/carlrobertoh/CodeGPT/issues/95
-            var action = new BaseEditorAction(promptDetails.getName(), promptDetails.getName()) {
+            var label = switch (promptDetails.getCode() == null ? "" : promptDetails.getCode()) {
+              case "EXPLAIN" -> CodeGPTBundle.get("methodActions.explain");
+              case "WRITE_TESTS" -> CodeGPTBundle.get("methodActions.writeTests");
+              case "FIND_BUGS" -> CodeGPTBundle.get("methodActions.findBugs");
+              default -> promptDetails.getName();
+            };
+            var action = new BaseEditorAction(label, label) {
               @Override
               protected void actionPerformed(Project project, Editor editor, String selectedText) {
                 var toolWindowContentManager =
@@ -50,7 +57,8 @@ public class EditorActionsUtil {
                     selectedText,
                     editor.getVirtualFile().getPath());
                 toolWindowContentManager.sendMessage(
-                    new Message(prompt.replace("{SELECTION}", formattedCode)));
+                    new Message(prompt.replace("{SELECTION}", formattedCode)
+                        + "\n\n" + CodeGPTBundle.get("methodActions.replyChinese")));
               }
             };
             group.add(action);

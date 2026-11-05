@@ -785,7 +785,8 @@ public class ChatToolWindowTabPanel implements Disposable {
       var formattedCode = CompletionRequestUtil.formatCode(
           editor.getSelectionModel().getSelectedText(),
           editor.getVirtualFile().getPath());
-      var message = new Message(action.getPrompt().replace("{SELECTION}", formattedCode));
+      var message = new Message(action.getPrompt().replace("{SELECTION}", formattedCode)
+          + "\n\n" + CodeGPTBundle.get("methodActions.replyChinese"));
       sendMessage(message, ConversationType.DEFAULT);
       return Unit.INSTANCE;
     });

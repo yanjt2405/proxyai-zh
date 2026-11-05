@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>ee.carlrobert.chatgpt</id>
-  <name>Proxy AI</name>
-  <vendor email="carlrobertoh@gmail.com" url="https://carlrobert.ee">Carl-Robert Linnupuu</vendor>
+  <name>ProxyAI 中文增强版（非官方）</name>
+  <vendor url="https://github.com/carlrobertoh/ProxyAI">非官方中文增强版；基于 Carl-Robert Linnupuu 的 ProxyAI</vendor>
   <depends>com.intellij.modules.platform</depends>
   <depends>com.intellij.modules.lang</depends>
   <depends optional="true" config-file="plugin-kotlin.xml">org.jetbrains.kotlin</depends>
@@ -12,6 +12,10 @@
   <!--    <depends optional="true" config-file="plugin-php.xml">com.jetbrains.php</depends>-->
   <!--    <depends optional="true" config-file="plugin-swift.xml">com.intellij.swift</depends>-->
   <depends optional="true" config-file="plugin-git.xml">Git4Idea</depends>
+
+  <extensions defaultExtensionNs="org.jetbrains.kotlin">
+    <supportsKotlinPluginMode supportsK2="true"/>
+  </extensions>
 
   <projectListeners>
     <listener topic="com.intellij.codeInsight.lookup.LookupManagerListener"
@@ -31,23 +35,23 @@
       instance="ee.carlrobert.codegpt.settings.GeneralSettingsConfigurable"/>
 
     <projectConfigurable id="settings.codegpt.agents" parentId="settings.codegpt"
-      displayName="Agent"
+      displayName="智能体"
       instance="ee.carlrobert.codegpt.settings.agents.AgentConfigurable" groupWeight="35"/>
     <projectConfigurable id="settings.codegpt.agents.acp" parentId="settings.codegpt.agents"
       displayName="ACP"
       instance="ee.carlrobert.codegpt.settings.agents.acp.AcpAgentConfigurable"/>
     <projectConfigurable id="settings.codegpt.subagents" parentId="settings.codegpt.agents"
-      displayName="Subagents"
+      displayName="子智能体"
       instance="ee.carlrobert.codegpt.settings.agents.SubagentsConfigurable"/>
     <projectConfigurable id="settings.codegpt.skills" parentId="settings.codegpt.agents"
-      displayName="Skills"
+      displayName="技能"
       instance="ee.carlrobert.codegpt.settings.skills.SkillsConfigurable"/>
     <projectConfigurable id="settings.codegpt.hooks" parentId="settings.codegpt.agents"
-      displayName="Hooks"
+      displayName="钩子"
       instance="ee.carlrobert.codegpt.settings.hooks.HooksConfigurable"/>
 
     <applicationConfigurable id="settings.codegpt.services" parentId="settings.codegpt"
-      displayName="Providers"
+      displayName="模型提供商"
       instance="ee.carlrobert.codegpt.settings.service.ServiceConfigurable" groupWeight="30"/>
     <applicationConfigurable id="settings.codegpt.services.codegpt"
       parentId="settings.codegpt.services" displayName="ProxyAI"
@@ -90,18 +94,18 @@
       bundle="messages.codegpt" key="settings.models.displayName"
       instance="ee.carlrobert.codegpt.settings.models.ModelSettingsConfigurable" groupWeight="20"/>
     <applicationConfigurable id="settings.codegpt.prompts" parentId="settings.codegpt"
-      displayName="Prompts"
+      displayName="提示词"
       instance="ee.carlrobert.codegpt.settings.prompts.PromptsConfigurable" groupWeight="15"/>
     <applicationConfigurable id="settings.codegpt.configuration" parentId="settings.codegpt"
-      displayName="Configuration"
+      displayName="插件配置"
       instance="ee.carlrobert.codegpt.settings.configuration.ConfigurationConfigurable"
       groupWeight="10"/>
     <applicationConfigurable id="settings.codegpt.advanced" parentId="settings.codegpt"
-      displayName="Advanced Settings"
+      displayName="高级设置"
       instance="ee.carlrobert.codegpt.settings.advanced.AdvancedSettingsConfigurable"
       groupWeight="5"/>
     <applicationConfigurable id="tools.preferences.codegpt.telemetry" parentId="settings.codegpt"
-      displayName="Telemetry"
+      displayName="使用统计"
       instance="ee.carlrobert.codegpt.telemetry.ui.preferences.TelemetryConfigurable"
       groupWeight="0"/>
 
@@ -186,28 +190,28 @@
         <action
           id="CodeGPT.NewChat"
           class="ee.carlrobert.codegpt.actions.editor.OpenNewChatAction"
-          text="New Chat"
-          description="Creates a new chat session">
+          text="新建对话"
+          description="创建新的对话">
           <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift N"
             replace-all="true"/>
         </action>
         <action
           id="CodeGPT.ContextMenuInlineEditAction"
-          text="Inline Edit"
-          description="Edit code inline from editor's context menu"
+          text="行内编辑"
+          description="在编辑器中修改代码"
           class="ee.carlrobert.codegpt.actions.editor.InlineEditContextMenuAction">
           <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift K" replace-all="true"/>
         </action>
         <action
           id="CodeGPT.AskQuestion"
-          text="Ask Question"
+          text="提问"
           class="ee.carlrobert.codegpt.actions.editor.AskQuestionAction">
           <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift Q"
             replace-all="true"/>
         </action>
         <separator/>
         <group id="CodeGPT.MyEditorActionsGroup"
-          text="My Actions"
+          text="我的操作"
           class="com.intellij.openapi.actionSystem.DefaultActionGroup">
         </group>
       </group>
@@ -216,7 +220,7 @@
     </group>
     <action id="CodeGPT.TriggerEditorPopup"
       class="ee.carlrobert.codegpt.actions.editor.ShowEditorActionGroupAction"
-      text="Show ProxyAI Actions">
+      text="显示 ProxyAI 操作">
       <keyboard-shortcut first-keystroke="ctrl shift alt m" keymap="$default"/>
     </action>
     <group id="CodeGPT.ProjectViewPopupMenuRootGroup">
@@ -227,7 +231,7 @@
         icon="ee.carlrobert.codegpt.Icons.DefaultSmall">
         <action
           id="CodeGPT.IncludeFilesInContextAction"
-          text="Include Files In Prompt"
+          text="将文件加入提示词"
           class="ee.carlrobert.codegpt.actions.IncludeFilesInContextAction"/>
       </group>
       <add-to-group
@@ -240,8 +244,8 @@
     <group id="CodeGPT.FloatingCodeToolbarMenuRootGroup">
       <action
         id="CodeGPT.FloatingMenuInlineEditAction"
-        text="Inline Edit"
-        description="Edit code inline from editor's floating menu"
+        text="行内编辑"
+        description="在编辑器中修改代码"
         class="ee.carlrobert.codegpt.actions.editor.InlineEditFloatingMenuAction">
         <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift K" replace-all="true"/>
       </action>
@@ -255,8 +259,8 @@
     <action
       id="CodeGPT.AddSelectionToContext"
       class="ee.carlrobert.codegpt.actions.editor.AddSelectionToContextAction"
-      text="Include Selection in Prompt"
-      description="Adds the selected text to the ProxyAI context">
+      text="将所选代码加入提示词"
+      description="把所选代码加入 ProxyAI 上下文">
       <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift I" replace-all="true"/>
 
       <add-to-group group-id="action.editor.group.EditorActionGroup" anchor="after"

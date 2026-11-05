@@ -70,7 +70,9 @@ class AgentToolWindowContentManager(private val project: Project) : Disposable {
         toolWindow.show()
 
         val contentManager = toolWindow.contentManager
-        val agentContent = contentManager.contents.firstOrNull { it.tabName == "Agent" }
+        val agentContent = contentManager.contents.firstOrNull {
+            it.tabName == ee.carlrobert.codegpt.CodeGPTBundle.get("toolWindow.tab.agent")
+        }
             ?: contentManager.getContent(0)
         if (agentContent != null) {
             contentManager.setSelectedContent(agentContent)

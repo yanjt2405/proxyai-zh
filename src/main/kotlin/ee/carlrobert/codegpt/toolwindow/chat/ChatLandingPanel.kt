@@ -7,6 +7,7 @@ import com.intellij.ui.JBColor
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.components.BorderLayoutPanel
 import ee.carlrobert.codegpt.completions.CompletionRequestUtil
+import ee.carlrobert.codegpt.CodeGPTBundle
 import ee.carlrobert.codegpt.conversations.Conversation
 import ee.carlrobert.codegpt.conversations.ConversationService
 import ee.carlrobert.codegpt.psistructure.PsiStructureProvider
@@ -165,7 +166,10 @@ class ChatLandingPanel(
                 selectedText,
                 editor.virtualFile?.path ?: ""
             )
-            submitInitialMessage(action.prompt.replace("{SELECTION}", formattedCode))
+            submitInitialMessage(
+                action.prompt.replace("{SELECTION}", formattedCode) +
+                    "\n\n" + CodeGPTBundle.get("methodActions.replyChinese")
+            )
         }
     }
 }
