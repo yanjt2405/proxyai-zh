@@ -1,6 +1,6 @@
 <!-- Plugin description -->
 
-**非官方中文增强版。** 基于 Apache 2.0 许可的 ProxyAI 源码，增加中文聊天入口，以及显示在 Java 方法和 Kotlin 函数注解上方的 Code Vision 操作图标。点击图标可选择解释代码、编写单元测试或查找问题，结果发送到 ProxyAI Chat。
+**非官方中文增强版。** 基于 Apache 2.0 许可的 ProxyAI 源码，增加中文聊天与智能体界面，以及显示在 Java 方法和 Kotlin 函数注解上方的 Code Vision 操作图标。点击图标可选择解释代码、编写单元测试或查找问题，结果发送到 ProxyAI Chat。
 
 ProxyAI is an AI-powered code assistant designed to help you with various programming activities.
 It's a powerful alternative to Cursor, Windsurf, GitHub Copilot, AI Assistant, and other JetBrains plugins.

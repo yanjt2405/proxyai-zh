@@ -9,6 +9,7 @@ import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.util.Disposer
 import com.intellij.util.ui.components.BorderLayoutPanel
 import ee.carlrobert.codegpt.conversations.Conversation
+import ee.carlrobert.codegpt.CodeGPTBundle
 import ee.carlrobert.codegpt.toolwindow.ToolWindowInitialState
 import ee.carlrobert.codegpt.toolwindow.agent.ui.AgentCreditsToolbarLabel
 import java.awt.CardLayout
@@ -46,8 +47,8 @@ class AgentToolWindowPanel(
     private fun createToolbar(): JComponent {
         val actionGroup = DefaultActionGroup().apply {
             add(object : AnAction(
-                "New Agent",
-                "Create a new Agent session",
+                CodeGPTBundle.get("agent.action.new"),
+                CodeGPTBundle.get("agent.action.new.description"),
                 AllIcons.General.Add
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
@@ -60,8 +61,8 @@ class AgentToolWindowPanel(
             })
 
             add(object : AnAction(
-                "Reset Current Agent",
-                "Clear all messages and reset the current agent view",
+                CodeGPTBundle.get("agent.action.reset"),
+                CodeGPTBundle.get("agent.action.reset.description"),
                 AllIcons.General.Reset
             ) {
                 override fun actionPerformed(e: AnActionEvent) {

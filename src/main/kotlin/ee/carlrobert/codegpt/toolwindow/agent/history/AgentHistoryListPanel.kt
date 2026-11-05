@@ -9,6 +9,7 @@ import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import com.intellij.util.ui.components.BorderLayoutPanel
+import ee.carlrobert.codegpt.CodeGPTBundle
 import ee.carlrobert.codegpt.agent.history.AgentHistoryThreadSummary
 import ee.carlrobert.codegpt.agent.history.CheckpointRef
 import java.awt.BorderLayout
@@ -28,7 +29,8 @@ class AgentHistoryListPanel(
 ) : BorderLayoutPanel() {
 
     companion object {
-        val TIMESTAMP_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, h:mm a")
+        val TIMESTAMP_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern(CodeGPTBundle.get("agent.history.timestampPattern"))
         private const val MIN_VISIBLE_ROWS = 2
     }
 
@@ -59,7 +61,7 @@ class AgentHistoryListPanel(
     private val emptyPanel = BorderLayoutPanel().apply {
         border = JBUI.Borders.empty(12, 8)
         addToCenter(
-            JBLabel("No conversations found", SwingConstants.LEFT).apply {
+            JBLabel(CodeGPTBundle.get("agent.history.noConversations"), SwingConstants.LEFT).apply {
                 foreground = UIUtil.getContextHelpForeground()
             }
         )
@@ -84,7 +86,7 @@ class AgentHistoryListPanel(
     }
 
     private fun setupUI() {
-        searchField.textEditor.emptyText.text = "Search checkpoint conversations"
+        searchField.textEditor.emptyText.text = CodeGPTBundle.get("agent.history.searchPlaceholder")
         searchField.border = JBUI.Borders.empty(4, 0, 2, 0)
         historyList.border = JBUI.Borders.emptyTop(4)
 
@@ -254,11 +256,11 @@ class AgentHistoryListPanel(
         val loaded = listModel.size
         val queryActive = currentQuery.isNotBlank()
         statusLabel.text = when {
-            isLoading && loaded == 0 -> "Loading..."
-            currentTotal == 0 && queryActive -> "No results"
-            currentTotal == 0 -> "No threads"
-            isLoading -> "Showing $loaded of $currentTotal..."
-            else -> "Showing $loaded of $currentTotal"
+            isLoading && loaded == 0 -> CodeGPTBundle.get("agent.history.loading")
+            currentTotal == 0 && queryActive -> CodeGPTBundle.get("agent.history.noResults")
+            currentTotal == 0 -> CodeGPTBundle.get("agent.history.noThreads")
+            isLoading -> CodeGPTBundle.get("agent.history.showingLoading", loaded, currentTotal)
+            else -> CodeGPTBundle.get("agent.history.showing", loaded, currentTotal)
         }
     }
 

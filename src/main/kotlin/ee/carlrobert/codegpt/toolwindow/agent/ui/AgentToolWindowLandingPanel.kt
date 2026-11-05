@@ -44,6 +44,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import ee.carlrobert.codegpt.util.coroutines.DisposableCoroutineScope
 import com.intellij.openapi.Disposable
+import ee.carlrobert.codegpt.CodeGPTBundle
 import java.awt.Color
 import java.awt.Desktop
 import java.net.URI
@@ -123,16 +124,8 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
             border = JBUI.Borders.customLine(JBColor.border(), 1, 0, 0, 0)
             addContent(
                 createTextPane(
-                    """
-                    <html>
-                    <p style="margin-top: 4px; margin-bottom: 4px;">
-                      It looks like you haven't configured your API key yet. Visit <a href="#OPEN_SETTINGS">ProxyAI settings</a> to do so.
-                    </p>
-                    <p style="margin-top: 4px; margin-bottom: 4px;">
-                      Don't have an account? <a href="https://tryproxy.io/signin">Sign up</a> to get started.
-                    </p>
-                    </html>
-                    """.trimIndent(),
+                    "<html><p>${CodeGPTBundle.get("landing.missingKey")}</p>" +
+                        "<p>${CodeGPTBundle.get("landing.signUp")}</p></html>",
                     false
                 ) { event ->
                     if (event.eventType == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED &&
@@ -174,7 +167,7 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
         panel.border = JBUI.Borders.emptyTop(8)
         panel.alignmentX = LEFT_ALIGNMENT
 
-        panel.add(createLabel("Quick Actions"))
+        panel.add(createLabel(CodeGPTBundle.get("agent.landing.quickActions")))
         panel.add(Box.createVerticalStrut(6))
 
         val itemsPanel = JPanel()
@@ -182,12 +175,12 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
         itemsPanel.border = JBUI.Borders.emptyLeft(16)
         itemsPanel.alignmentX = LEFT_ALIGNMENT
 
-        itemsPanel.add(createLink("Manage Subagents") {
+        itemsPanel.add(createLink(CodeGPTBundle.get("agent.landing.manageSubagents")) {
             ShowSettingsUtil.getInstance()
                 .showSettingsDialog(project, SubagentsConfigurable::class.java)
         })
         itemsPanel.add(Box.createVerticalStrut(6))
-        itemsPanel.add(createLink("Documentation & Tips") {
+        itemsPanel.add(createLink(CodeGPTBundle.get("agent.landing.documentation")) {
             try {
                 Desktop.getDesktop().browse(URI("https://docs.tryproxy.io/agent"))
             } catch (e: Exception) {
@@ -205,7 +198,7 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
         panel.border = JBUI.Borders.empty()
         panel.alignmentX = LEFT_ALIGNMENT
 
-        panel.add(createLabel("Project Setup"))
+        panel.add(createLabel(CodeGPTBundle.get("agent.landing.projectSetup")))
         panel.add(Box.createVerticalStrut(6))
 
         val container = JPanel()
@@ -215,9 +208,9 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
 
         val vf = findProxyAiFile()
         if (vf == null) {
-            container.add(createLabel("PROXYAI.md not found"))
+            container.add(createLabel(CodeGPTBundle.get("agent.landing.projectFileMissing")))
             container.add(Box.createVerticalStrut(6))
-            container.add(createLink("Initialize Project") { createProxyAiFile() })
+            container.add(createLink(CodeGPTBundle.get("agent.landing.initializeProject")) { createProxyAiFile() })
         } else {
             val topRow = JPanel()
             topRow.layout = BoxLayout(topRow, BoxLayout.X_AXIS)
@@ -234,7 +227,7 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
             topRow.add(JBLabel(" • "))
 
             val tokens = countFileTokens(vf)
-            topRow.add(JBLabel("Tokens: "))
+            topRow.add(JBLabel(CodeGPTBundle.get("agent.landing.tokens") + " "))
             val tokensLabel = JBLabel(formatTokens(tokens))
             tokensLabel.foreground = healthColor(tokens)
             topRow.add(tokensLabel)
@@ -250,21 +243,21 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
             detailsRow.alignmentX = LEFT_ALIGNMENT
             detailsRow.add(
                 createHoverDetailsLabel(
-                    text = "Skills ${skills.size}",
+                    text = CodeGPTBundle.get("agent.landing.skillsCount", skills.size),
                     tooltip = buildSkillsTooltip(skills)
                 )
             )
             detailsRow.add(createDetailsSeparator())
             detailsRow.add(
                 createHoverDetailsLabel(
-                    text = "Hooks $enabledHooksCount",
+                    text = CodeGPTBundle.get("agent.landing.hooksCount", enabledHooksCount),
                     tooltip = buildHooksTooltip(hookEntries)
                 )
             )
             detailsRow.add(createDetailsSeparator())
             detailsRow.add(
                 createHoverDetailsLabel(
-                    text = "Subagents ${subagents.size}",
+                    text = CodeGPTBundle.get("agent.landing.subagentsCount", subagents.size),
                     tooltip = buildSubagentsTooltip(subagents)
                 )
             )
@@ -286,7 +279,7 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             alignmentX = LEFT_ALIGNMENT
             isOpaque = false
-            add(createLabel("Previous Chats"))
+            add(createLabel(CodeGPTBundle.get("agent.landing.previousChats")))
             add(Box.createVerticalStrut(6))
         })
         panel.addToCenter(historyListPanel)
@@ -400,20 +393,10 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
 
     private fun welcomeMessage(): String {
         val name = GeneralSettings.getCurrentState().displayName
-        return """
-            <html>
-            <p style="margin-top: 4px; margin-bottom: 4px;">
-            Hi <strong>$name</strong>, I'm <strong>ProxyAI Agent</strong>! I can break down complex tasks, modify your codebase, navigate project files, execute terminal commands, and orchestrate multi-phase development workflows.
-            </p>
-            </html>
-        """.trimIndent()
+        return "<html><p>${CodeGPTBundle.get("agent.landing.welcome", name)}</p></html>"
     }
 
-    private fun defaultProxyAiContent() = """
-        # ProxyAI Instructions
-
-        Describe goals, conventions, risky areas, and review rules here.
-    """.trimIndent()
+    private fun defaultProxyAiContent() = CodeGPTBundle.get("agent.project.defaultInstructions")
 
     private fun countFileTokens(vf: VirtualFile): Int {
         val text = runCatching { VfsUtilCore.loadText(vf) }.getOrNull() ?: ""
@@ -455,35 +438,41 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
     }
 
     private fun collectHookEntries(configuration: HookConfiguration): List<HookEntry> = buildList {
-        addAll(configuration.beforeToolUse.map { HookEntry("Before tool", it) })
-        addAll(configuration.afterToolUse.map { HookEntry("After tool", it) })
-        addAll(configuration.subagentStart.map { HookEntry("Subagent start", it) })
-        addAll(configuration.subagentStop.map { HookEntry("Subagent stop", it) })
-        addAll(configuration.beforeShellExecution.map { HookEntry("Before shell", it) })
-        addAll(configuration.afterShellExecution.map { HookEntry("After shell", it) })
-        addAll(configuration.beforeReadFile.map { HookEntry("Before read", it) })
-        addAll(configuration.afterFileEdit.map { HookEntry("After edit", it) })
-        addAll(configuration.stop.map { HookEntry("Stop", it) })
+        addAll(configuration.beforeToolUse.map { HookEntry(CodeGPTBundle.get("agent.hook.beforeTool"), it) })
+        addAll(configuration.afterToolUse.map { HookEntry(CodeGPTBundle.get("agent.hook.afterTool"), it) })
+        addAll(configuration.subagentStart.map { HookEntry(CodeGPTBundle.get("agent.hook.subagentStart"), it) })
+        addAll(configuration.subagentStop.map { HookEntry(CodeGPTBundle.get("agent.hook.subagentStop"), it) })
+        addAll(configuration.beforeShellExecution.map { HookEntry(CodeGPTBundle.get("agent.hook.beforeShell"), it) })
+        addAll(configuration.afterShellExecution.map { HookEntry(CodeGPTBundle.get("agent.hook.afterShell"), it) })
+        addAll(configuration.beforeReadFile.map { HookEntry(CodeGPTBundle.get("agent.hook.beforeRead"), it) })
+        addAll(configuration.afterFileEdit.map { HookEntry(CodeGPTBundle.get("agent.hook.afterEdit"), it) })
+        addAll(configuration.stop.map { HookEntry(CodeGPTBundle.get("agent.hook.stop"), it) })
     }
 
     private fun buildSkillsTooltip(skills: List<SkillDescriptor>): String {
         if (skills.isEmpty()) {
-            return tooltipHtml("Skills", listOf("No skills discovered in .proxyai/skills"))
+            return tooltipHtml(
+                CodeGPTBundle.get("agent.landing.skills"),
+                listOf(CodeGPTBundle.get("agent.landing.noSkills"))
+            )
         }
 
         val lines = skills.take(5).map { "• ${it.name} — ${it.title}" }.toMutableList()
         val remaining = skills.size - lines.size
         if (remaining > 0) {
-            lines.add("+$remaining more")
+            lines.add(CodeGPTBundle.get("agent.landing.more", remaining))
         }
 
-        return tooltipHtml("Skills (${skills.size})", lines)
+        return tooltipHtml(CodeGPTBundle.get("agent.landing.skillsCountParenthesized", skills.size), lines)
     }
 
     private fun buildHooksTooltip(hookEntries: List<HookEntry>): String {
         val enabled = hookEntries.filter { it.hook.enabled }
         if (hookEntries.isEmpty()) {
-            return tooltipHtml("Hooks", listOf("No hooks configured"))
+            return tooltipHtml(
+                CodeGPTBundle.get("agent.landing.hooks"),
+                listOf(CodeGPTBundle.get("agent.landing.noHooks"))
+            )
         }
 
         val lines = mutableListOf<String>()
@@ -492,24 +481,27 @@ class AgentToolWindowLandingPanel(private val project: Project) : BorderLayoutPa
         }
         val remainingEnabled = enabled.size - 4
         if (remainingEnabled > 0) {
-            lines.add("+$remainingEnabled more enabled")
+            lines.add(CodeGPTBundle.get("agent.landing.moreEnabled", remainingEnabled))
         }
 
-        return tooltipHtml("Hooks", lines)
+        return tooltipHtml(CodeGPTBundle.get("agent.landing.hooks"), lines)
     }
 
     private fun buildSubagentsTooltip(subagents: List<ProxyAISubagent>): String {
         if (subagents.isEmpty()) {
-            return tooltipHtml("Subagents", listOf("No subagents configured"))
+            return tooltipHtml(
+                CodeGPTBundle.get("agent.landing.subagents"),
+                listOf(CodeGPTBundle.get("agent.landing.noSubagents"))
+            )
         }
 
         val lines = subagents.take(5).map { "• ${it.title}" }.toMutableList()
         val remaining = subagents.size - lines.size
         if (remaining > 0) {
-            lines.add("+$remaining more")
+            lines.add(CodeGPTBundle.get("agent.landing.more", remaining))
         }
 
-        return tooltipHtml("Subagents (${subagents.size})", lines)
+        return tooltipHtml(CodeGPTBundle.get("agent.landing.subagentsCountParenthesized", subagents.size), lines)
     }
 
     private fun tooltipHtml(title: String, lines: List<String>): String {

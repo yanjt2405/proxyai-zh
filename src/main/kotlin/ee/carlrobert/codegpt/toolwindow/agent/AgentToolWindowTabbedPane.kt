@@ -13,6 +13,7 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.util.ui.JBUI
 import ee.carlrobert.codegpt.agent.AgentService
+import ee.carlrobert.codegpt.CodeGPTBundle
 import ee.carlrobert.codegpt.conversations.Conversation
 import java.awt.*
 import java.awt.event.ActionEvent
@@ -142,10 +143,12 @@ class AgentToolWindowTabbedPane(private val project: Project) : JBTabbedPane(), 
     fun addNewTab(toolWindowPanel: AgentToolWindowTabPanel, select: Boolean) {
         val wasEmpty = activeTabMapping.isEmpty()
         val tabIndices = activeTabMapping.keys.toTypedArray()
+        val defaultTitlePrefix = CodeGPTBundle.get("agent.session.defaultTitlePrefix")
+        val defaultTitlePattern = "${Regex.escape(defaultTitlePrefix)} \\d+".toRegex()
         var nextNumber = 0
 
         for (title in tabIndices) {
-            if (title.matches("Agent \\d+".toRegex())) {
+            if (title.matches(defaultTitlePattern)) {
                 val tabNum = title.replace("\\D+".toRegex(), "").toInt()
                 if (tabNum - 1 == nextNumber) {
                     nextNumber++
@@ -185,7 +188,7 @@ class AgentToolWindowTabbedPane(private val project: Project) : JBTabbedPane(), 
         return if (customName.isNotBlank()) {
             ensureUniqueName(customName, null)
         } else {
-            "Agent ${nextIndex + 1}"
+            CodeGPTBundle.get("agent.session.defaultTitle", nextIndex + 1)
         }
     }
 
@@ -329,8 +332,8 @@ class AgentToolWindowTabbedPane(private val project: Project) : JBTabbedPane(), 
 
         val currentTitle = getTitleAt(tabIndex)
         val newName = Messages.showInputDialog(
-            "Enter new title:",
-            "Rename Agent Session",
+            CodeGPTBundle.get("agent.session.rename.prompt"),
+            CodeGPTBundle.get("agent.session.rename.title"),
             Messages.getQuestionIcon(),
             currentTitle,
             AgentSessionNameValidator()
@@ -396,7 +399,7 @@ class AgentToolWindowTabbedPane(private val project: Project) : JBTabbedPane(), 
             preferredSize = Dimension(closeIcon.iconWidth, closeIcon.iconHeight)
             border = BorderFactory.createEmptyBorder()
             isContentAreaFilled = false
-            toolTipText = "Close Agent"
+            toolTipText = CodeGPTBundle.get("agent.session.close")
             rolloverIcon = AllIcons.Actions.CloseHovered
         }
         panel.addToRight(button)
@@ -422,14 +425,14 @@ class AgentToolWindowTabbedPane(private val project: Project) : JBTabbedPane(), 
         private var selectedPopupTabIndex = -1
 
         init {
-            add(createPopupMenuItem("Rename Title") {
+            add(createPopupMenuItem(CodeGPTBundle.get("agent.session.rename.action")) {
                 if (selectedPopupTabIndex >= 0) renameAgentSession(selectedPopupTabIndex)
             })
             addSeparator()
-            add(createPopupMenuItem("Close") {
+            add(createPopupMenuItem(CodeGPTBundle.get("agent.session.close")) {
                 if (selectedPopupTabIndex >= 0) closeTabAt(selectedPopupTabIndex)
             })
-            add(createPopupMenuItem("Close Other Tabs") {
+            add(createPopupMenuItem(CodeGPTBundle.get("agent.session.closeOthers")) {
                 if (selectedPopupTabIndex < 0) return@createPopupMenuItem
                 val selectedPopupTabTitle = getTitleAt(selectedPopupTabIndex)
                 val tabPanel = activeTabMapping[selectedPopupTabTitle] ?: return@createPopupMenuItem
